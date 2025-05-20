@@ -8,28 +8,31 @@ import matplotlib.pyplot as plt
 from openai import OpenAI
 
 # --- 상수 정의 ---
-EXPECTED_STUDENT_SHEET_HEADER = ["날짜", "감정", "감사한 일", "하고 싶은 말", "선생님 쪽지"] # 최종 확인된 헤더
+EXPECTED_STUDENT_SHEET_HEADER = ["날짜", "감정", "감사한 일", "하고 싶은 말", "선생님 쪽지"]
 EMOTION_GROUPS = ["😀 긍정", "😐 보통", "😢 부정"]
-FONT_PATH = "NanumGothic.ttf"
+FONT_PATH = "NanumGothic.ttf"  # 예: "NanumGothic.ttf" (앱과 같은 폴더에 있을 경우)
 
-GPT_SYSTEM_PROMPT = """
+GPT_CUMULATIVE_SYSTEM_PROMPT = """
 당신은 초등학교 학생들의 심리 및 상담 분야에서 깊은 전문성을 가진 AI 상담 보조입니다. 
 당신의 분석은 인간 중심 상담 이론, 인지 행동 이론 등 실제 상담 이론에 기반해야 합니다. 
-제공되는 학생의 익명 단일 일기 내용을 바탕으로, 다음 6가지 항목에 대해 구체적이고 통찰력 있는 리포트를 선생님께 제공해주세요. 
+제공되는 한 학생의 **누적된 익명 일기 기록 전체 (감정, 감사한 일, 하고 싶은 말)**를 바탕으로, 다음 6가지 항목에 대해 구체적이고 통찰력 있는 리포트를 선생님께 제공해주세요. 
 학생의 이름이나 개인 식별 정보는 절대 언급하지 마세요. 답변은 명확한 항목 구분을 위해 마크다운 헤더를 사용해주세요.
 
-제공된 오늘의 일기 내용:
-- 오늘 표현된 감정: {emotion_data}
-- 오늘의 감사한 일: {gratitude_data} # "감사일기"에서 "감사한 일"로 일치
-- 오늘의 하고 싶은 말/일기 내용: {message_data}
+제공될 누적 일기 내용 형식 (실제 내용은 아래 데이터 형식으로 전달됩니다):
+- 전체 감정 기록: [날짜1: 감정1, 날짜2: 감정2, ...]
+- 전체 감사한 일 기록: [날짜1: 감사한 일1, 날짜2: 감사한 일2, ...]
+- 전체 하고 싶은 말 기록: [날짜1: 하고 싶은 말1, 날짜2: 하고 싶은 말2, ...]
+
+학생의 누적 기록 데이터:
+{cumulative_diary_data_for_gpt}
 
 리포트 항목:
-1.  **오늘 표현된 감정 상태 심층 분석**: 학생이 표현한 감정의 명확성, 감정의 이면에 있을 수 있는 생각이나 느낌, 그리고 이 감정이 학생에게 어떤 의미를 가질 수 있는지 분석해주세요. (단일 일기이므로 '통계'가 아닌 심층 분석입니다.)
-2.  **문체 및 표현 특성**: 사용된 어휘의 수준(초등학생 수준 고려), 문장 구조의 복잡성, 자기 생각이나 감정을 얼마나 명확하고 풍부하게 표현하고 있는지, 주관적 감정 표현의 강도는 어떠한지 등을 평가해주세요.
-3.  **주요 키워드 및 주제 추출**: 오늘 일기 내용에서 반복적으로 나타나거나 중요하다고 판단되는 핵심 단어(키워드)를 3~5개 추출하고, 이를 통해 학생의 현재 주요 관심사, 자주 언급되는 대상(예: 친구, 가족, 특정 활동 등), 또는 반복되는 상황이나 사건을 파악해주세요.
-4.  **오늘 일기에 대한 종합 요약**: 위 분석들을 바탕으로 오늘 학생이 일기를 통해 전달하고자 하는 핵심적인 내용이나 전반적인 상태를 간결하게 요약해주세요.
-5.  **관찰 및 변화 고려 지점**: 오늘 일기 내용을 바탕으로 선생님께서 앞으로 이 학생의 어떤 면을 좀 더 관심 있게 지켜보면 좋을지, 또는 어떤 긍정적/부정적 변화의 가능성이 엿보이는지 구체적으로 언급해주세요. (단일 일기이므로 '변화 추적'이 아닌 미래 관찰 지점 제안입니다.)
-6.  **선생님을 위한 상담적 조언**: 학생의 현재 상태를 고려하여, 선생님께서 이 학생을 지지하고 돕기 위해 활용할 수 있는 인간 중심적 또는 인지 행동적 접근 방식에 기반한 구체적인 상담 전략이나 소통 방법을 1~2가지 제안해주세요. 예를 들어, 어떤 질문을 해볼 수 있는지, 어떤 공감적 반응을 보일 수 있는지 등을 포함할 수 있습니다.
+1.  **누적된 감정 기록 분석 및 가장 보편적인 감정 상태**: 제공된 모든 '감정' 기록을 바탕으로 학생이 가장 자주 표현하는 감정(들)은 무엇인지, 긍정/부정/중립 감정의 전반적인 비율이나 경향성은 어떠한지, 그리고 이를 통해 파악할 수 있는 학생의 가장 보편적인 감정 상태에 대해 분석해주세요.
+2.  **문체 및 표현 특성 (누적 기록 기반)**: 누적된 글 전체에서 나타나는 학생의 언어 수준(초등학생 수준 고려), 문장 구조의 복잡성, 자기 생각이나 감정을 얼마나 명확하고 풍부하게 표현하고 있는지, 주관적 감정 표현의 강도는 어떠한지 등을 평가해주세요.
+3.  **주요 키워드 및 주제 추출 (누적 기록 기반)**: 누적된 글 전체에서 반복적으로 나타나거나 중요하다고 판단되는 핵심 단어(키워드)를 3-5개 추출하고, 이를 통해 학생의 주요 관심사, 자주 언급되는 대상(예: 친구, 가족, 특정 활동 등), 또는 반복되는 상황이나 사건을 파악해주세요.
+4.  **누적된 기록에 대한 종합 요약**: 위 분석들을 바탕으로 누적된 기록 전체를 통해 파악할 수 있는 학생의 생각, 경험, 감정의 핵심적인 패턴이나 내용을 간결하게 요약해주세요.
+5.  **관찰 및 변화 추이 (누적 기록 기반)**: 누적된 기록을 통해 학생의 감정, 생각, 표현 방식 등에서 시간에 따른 변화나 일관된 패턴이 있다면 언급해주세요. 선생님께서 앞으로 이 학생의 어떤 면을 좀 더 관심 있게 지켜보면 좋을지, 또는 어떤 긍정적/부정적 변화의 가능성이 엿보이는지 구체적으로 언급해주세요.
+6.  **선생님을 위한 상담적 조언 (누적 기록 기반)**: 누적된 기록에서 파악된 학생의 특성을 바탕으로, 선생님께서 이 학생을 지지하고 돕기 위해 활용할 수 있는 인간 중심적 또는 인지 행동적 접근 방식에 기반한 구체적인 상담 전략이나 소통 방법을 1-2가지 제안해주세요.
 """
 
 # --- 페이지 기본 설정 ---
@@ -42,379 +45,313 @@ def authorize_gspread():
         google_creds_dict = st.secrets["GOOGLE_CREDENTIALS"]
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_dict(google_creds_dict, scope)
-        client_gspread = gspread.authorize(creds)
-        return client_gspread
+        return gspread.authorize(creds)
     except Exception as e:
-        st.error(f"Google API 인증 중 오류 발생: {e}. '.streamlit/secrets.toml' 파일 설정을 확인해주세요.")
-        st.stop() # 인증 실패 시 앱 중단
-        return None
+        st.error(f"Google API 인증 중 오류: {e}. '.streamlit/secrets.toml' 설정을 확인하세요.")
+        st.stop(); return None
 
 @st.cache_data(ttl=600)
 def get_students_df(_client_gspread):
     if not _client_gspread: return pd.DataFrame()
     try:
-        student_list_ws = _client_gspread.open("학생목록").sheet1
-        df = pd.DataFrame(student_list_ws.get_all_records())
-        if not df.empty:
-            if "이름" not in df.columns or "시트URL" not in df.columns:
-                st.error("'학생목록' 시트에 '이름' 또는 '시트URL' 열이 없습니다. 확인해주세요.")
-                return pd.DataFrame()
-        return df # 비어있더라도 DataFrame 반환
-    except gspread.exceptions.SpreadsheetNotFound:
-        st.error("Google Sheets에서 '학생목록' 시트를 찾을 수 없습니다. 시트 이름과 공유 설정을 확인해주세요.")
-        return pd.DataFrame()
-    except Exception as e:
-        st.error(f"학생 목록 로딩 중 오류: {e}")
-        return pd.DataFrame()
+        ws = _client_gspread.open("학생목록").sheet1
+        df = pd.DataFrame(ws.get_all_records())
+        if not df.empty and ("이름" not in df.columns or "시트URL" not in df.columns):
+            st.error("'학생목록' 시트에 '이름'/'시트URL' 열이 없습니다."); return pd.DataFrame()
+        return df
+    except Exception as e: st.error(f"학생 목록 로딩 오류: {e}"); return pd.DataFrame()
 
-def get_records_from_row2_header(worksheet, expected_header_list):
+def get_records_from_row2_header(worksheet, headers):
     all_values = worksheet.get_all_values()
     if len(all_values) < 2: return []
-    data_rows = all_values[2:]
-    records = []
-    for row_values in data_rows:
-        # 데이터 행의 실제 값 개수에 맞춰서 헤더 매핑 (짧으면 None으로 채우지만, 길면 잘릴 수 있음)
-        # 여기서는 expected_header_list 길이에 맞춰서 처리
-        actual_num_values = len(row_values)
-        num_headers = len(expected_header_list)
-        
-        current_row_data = {}
-        for i in range(num_headers):
-            if i < actual_num_values:
-                current_row_data[expected_header_list[i]] = row_values[i]
-            else:
-                current_row_data[expected_header_list[i]] = None # 값이 부족한 헤더는 None으로
-        records.append(current_row_data)
+    data_rows, records = all_values[2:], []
+    for r_vals in data_rows:
+        rec, pad_len = {}, len(headers) - len(r_vals)
+        padded_vals = r_vals + [None] * pad_len if pad_len > 0 else r_vals
+        for i, h in enumerate(headers): rec[h] = padded_vals[i] if i < len(padded_vals) else None
+        records.append(rec)
     return records
 
-
 @st.cache_data(ttl=300)
-def fetch_all_students_today_data(_students_df, today_date_str, _client_gspread, header_list):
+def fetch_all_students_today_data(_students_df, today_str, _client_gspread, headers):
     all_data = []
     if _students_df.empty: return all_data
-
-    progress_text = "전체 학생의 오늘 자 요약 정보 로딩 중... (0%)"
-    progress_bar = st.progress(0, text=progress_text)
-    total_students = len(_students_df)
-
-    for i, (_, student_row) in enumerate(_students_df.iterrows()):
-        name = student_row["이름"]
-        sheet_url = student_row["시트URL"]
-        student_entry = {"name": name, "emotion_today": None, "message_today": None, "error": None}
-        
-        current_progress = (i + 1) / total_students
-        progress_bar.progress(current_progress, text=f"'{name}' 학생 데이터 확인 중... ({int(current_progress*100)}%)")
-
-        if not sheet_url or not isinstance(sheet_url, str) or not sheet_url.startswith("http"):
-            student_entry["error"] = f"시트 URL 형식 오류"
-            all_data.append(student_entry)
-            continue
-        
+    prog_bar = st.progress(0, text="요약 정보 로딩 중... (0%)")
+    total = len(_students_df)
+    for i, (_, row) in enumerate(_students_df.iterrows()):
+        name, url = row["이름"], row["시트URL"]
+        entry = {"name": name, "emotion_today": None, "message_today": None, "error": None}
+        prog_val = (i + 1) / total
+        prog_bar.progress(prog_val, text=f"'{name}' 확인 중... ({int(prog_val*100)}%)")
+        if not url or not isinstance(url, str) or not url.startswith("http"):
+            entry["error"] = "시트 URL 형식 오류"; all_data.append(entry); continue
         try:
-            student_ws = _client_gspread.open_by_url(sheet_url).sheet1
-            records = get_records_from_row2_header(student_ws, header_list)
-            
-            todays_record_found = False
-            for record in records:
-                if record.get("날짜") == today_date_str:
-                    student_entry["emotion_today"] = record.get("감정")
-                    student_entry["message_today"] = record.get("하고 싶은 말")
-                    todays_record_found = True
-                    break
-            if not todays_record_found:
-                student_entry["error"] = "오늘 일기 없음"
-        except gspread.exceptions.SpreadsheetNotFound:
-            student_entry["error"] = "시트 찾을 수 없음"
-        except gspread.exceptions.APIError as e_api:
-            student_entry["error"] = f"Google API 오류 ({e_api.response.status_code})"
-        except Exception as e:
-            student_entry["error"] = f"데이터 로딩 오류 ({type(e).__name__})"
-        all_data.append(student_entry)
-    
-    progress_bar.empty()
-    return all_data
+            ws = _client_gspread.open_by_url(url).sheet1
+            recs = get_records_from_row2_header(ws, headers)
+            found = False
+            for r in recs:
+                if r.get("날짜") == today_str:
+                    entry["emotion_today"], entry["message_today"] = r.get("감정"), r.get("하고 싶은 말")
+                    found = True; break
+            if not found: entry["error"] = "오늘 일기 없음"
+        except Exception as e: entry["error"] = f"오류 ({type(e).__name__})"
+        all_data.append(entry)
+    prog_bar.empty(); return all_data
 
 # --- OpenAI API 클라이언트 초기화 ---
 client_openai = None
-openai_api_key_value = st.secrets.get("OPENAI_API_KEY")
-if openai_api_key_value:
-    try:
-        client_openai = OpenAI(api_key=openai_api_key_value)
-    except Exception as e:
-        st.warning(f"OpenAI 클라이언트 초기화 중 오류: {e} (GPT 분석 기능 사용 불가)")
-else:
-    # API 키가 없다는 메시지는 실제 GPT 기능 사용 시점에 표시
-    pass
+openai_api_key = st.secrets.get("OPENAI_API_KEY")
+if openai_api_key:
+    try: client_openai = OpenAI(api_key=openai_api_key)
+    except Exception as e: st.warning(f"OpenAI 클라이언트 초기화 오류: {e} (GPT 기능 비활성화)")
 
 # --- 세션 상태 초기화 ---
-default_session_states = {
-    "teacher_logged_in": False,
-    "all_students_today_data_loaded": False,
-    "all_students_today_data": [],
-    "detail_view_selected_student": "" # 탭3에서 선택된 학생
+session_defaults = {
+    "teacher_logged_in": False, "all_students_today_data_loaded": False,
+    "all_students_today_data": [], "detail_view_selected_student": ""
 }
-for key, value in default_session_states.items():
-    if key not in st.session_state:
-        st.session_state[key] = value
+for k, v in session_defaults.items():
+    if k not in st.session_state: st.session_state[k] = v
 
-# --- 교사용 로그인 페이지 ---
+# --- 교사용 로그인 ---
 if not st.session_state.teacher_logged_in:
     st.title("🧑‍🏫 감정일기 로그인 (교사용)")
-    admin_password = st.text_input("관리자 비밀번호를 입력하세요", type="password", key="admin_pw_vfinal")
-    
-    if st.button("로그인", key="admin_login_btn_vfinal"):
-        if admin_password == st.secrets.get("ADMIN_TEACHER_PASSWORD", "silverline"): # 예시 비밀번호
+    admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_pw_final_consolidated")
+    if st.button("로그인", key="admin_login_btn_final_consolidated"):
+        if admin_pw == st.secrets.get("ADMIN_TEACHER_PASSWORD", "silverline"):
             st.session_state.teacher_logged_in = True
-            st.session_state.all_students_today_data_loaded = False 
-            st.session_state.detail_view_selected_student = "" # 로그인 시 상세 보기 선택 초기화
+            for k, v_init in session_defaults.items(): # 로그인 시 세션 상태 초기화 (로그인 상태 제외)
+                 if k != "teacher_logged_in": st.session_state[k] = v_init
             st.rerun()
-        else:
-            st.error("비밀번호가 올바르지 않습니다.")
-else: # --- 교사용 기능 페이지 (로그인 완료 후) ---
-    client_gspread = authorize_gspread()
-    students_df = get_students_df(client_gspread)
+        else: st.error("비밀번호가 올바르지 않습니다.")
+else: # --- 교사용 기능 페이지 ---
+    g_client = authorize_gspread()
+    students_main_df = get_students_df(g_client)
 
-    st.sidebar.title(f"🧑‍🏫 교사 메뉴")
-    if st.sidebar.button("로그아웃", key="teacher_logout_vfinal"):
-        for key in default_session_states.keys(): # 세션 상태 초기화
-            st.session_state[key] = default_session_states[key]
+    st.sidebar.title("🧑‍🏫 교사 메뉴")
+    if st.sidebar.button("로그아웃", key="logout_final_consolidated"):
+        for k, v_init in session_defaults.items(): st.session_state[k] = v_init
         st.rerun()
-    
-    if st.sidebar.button("오늘 학생 데이터 새로고침 ♻️", key="refresh_data_vfinal"):
+    if st.sidebar.button("오늘 학생 데이터 새로고침 ♻️", key="refresh_data_final_consolidated"):
         st.session_state.all_students_today_data_loaded = False
-        st.cache_data.clear() # 관련된 모든 st.cache_data 함수 캐시 지우기
-        st.rerun()
+        st.cache_data.clear(); st.rerun()
 
     st.title("🧑‍🏫 교사용 대시보드")
 
     if not st.session_state.all_students_today_data_loaded:
-        if students_df.empty:
-            st.warning("'학생목록' 시트에 학생이 없거나, 시트 접근 권한 또는 내용을 확인해주세요.")
-            st.session_state.all_students_today_data = [] # 명시적으로 빈 리스트 할당
-            st.session_state.all_students_today_data_loaded = True # 로드 시도 완료로 표시
+        if students_main_df.empty:
+            st.warning("'학생목록' 시트가 비어있거나 접근 불가. 확인 후 '새로고침' 해주세요.")
+            st.session_state.all_students_today_data = []
+            st.session_state.all_students_today_data_loaded = True # 로드 시도 완료
         else:
-            today_date_str = datetime.today().strftime("%Y-%m-%d")
+            today_str = datetime.today().strftime("%Y-%m-%d")
             st.session_state.all_students_today_data = fetch_all_students_today_data(
-                students_df, today_date_str, client_gspread, EXPECTED_STUDENT_SHEET_HEADER
-            )
+                students_main_df, today_str, g_client, EXPECTED_STUDENT_SHEET_HEADER)
             st.session_state.all_students_today_data_loaded = True
-            # 로드 완료 메시지는 fetch_all_students_today_data 후 자동으로 나타나거나, 여기서 추가 가능
-            if not st.session_state.all_students_today_data and not students_df.empty : # 학생은 있는데 데이터가 안가져와진 경우
-                st.info("학생들의 오늘 자 데이터를 가져왔으나, 일기를 작성한 학생이 없거나 오류가 있었습니다.")
-            elif st.session_state.all_students_today_data:
-                 st.success("모든 학생의 오늘 자 요약 정보를 로드했습니다!")
+            if st.session_state.all_students_today_data: st.success("오늘 자 학생 요약 정보 로드 완료!")
+            # 로드 후 자동으로 rerun할 필요 없음, Streamlit이 위젯 변경 시 다시 그림
 
+    summary_data = st.session_state.get("all_students_today_data", [])
+    tabs_list = ["오늘의 학급 감정 분포 📊", "학생들이 전달하는 메시지 💌", "학생별 일기 상세 보기 📖"]
+    tab1, tab2, tab3 = st.tabs(tabs_list)
 
-    all_students_summary = st.session_state.get("all_students_today_data", [])
-
-    tab_titles = ["오늘의 학급 감정 분포 📊", "학생들이 전달하는 메시지 💌", "학생별 일기 상세 보기 📖"]
-    tab_emotion_overview, tab_student_messages, tab_detail_view = st.tabs(tab_titles)
-
-    with tab_emotion_overview:
-        st.header(tab_titles[0])
-        display_date_str = datetime.today().strftime("%Y-%m-%d")
-        st.markdown(f"**조회 날짜:** {display_date_str}")
-
-        if not all_students_summary: # 로드된 데이터가 비어있는지 확인
-            st.info("요약할 학생 데이터가 없습니다. '학생목록' 시트를 확인하거나 '오늘 학생 데이터 새로고침'을 시도해보세요.")
+    with tab1: # 오늘의 학급 감정 분포
+        st.header(tabs_list[0])
+        st.markdown(f"**조회 날짜:** {datetime.today().strftime('%Y-%m-%d')}")
+        if not summary_data: st.info("요약할 학생 데이터가 없습니다.")
         else:
-            emotion_cats = {group: [] for group in EMOTION_GROUPS}
-            emotion_cats["감정 미분류"] = []
-            emotion_cats["일기 미제출 또는 오류"] = []
-
-            for data in all_students_summary:
-                name = data["name"]
-                if data["error"] and data["error"] != "오늘 일기 없음":
-                    emotion_cats["일기 미제출 또는 오류"].append(f"{name} ({data['error']})")
-                    continue
-                if data["error"] == "오늘 일기 없음" or not data["emotion_today"]:
-                     emotion_cats["일기 미제출 또는 오류"].append(name)
-                     continue
-                emotion_str = data["emotion_today"]
-                if emotion_str and isinstance(emotion_str, str) and " - " in emotion_str:
-                    main_emotion = emotion_str.split(" - ")[0].strip()
-                    if main_emotion in EMOTION_GROUPS: emotion_cats[main_emotion].append(name)
-                    else: emotion_cats["감정 미분류"].append(f"{name} (감정: {emotion_str})")
-                else: emotion_cats["일기 미제출 또는 오류"].append(f"{name} (감정 형식 오류: {emotion_str})")
+            cats = {g: [] for g in EMOTION_GROUPS}
+            cats.update({"감정 미분류": [], "일기 미제출 또는 오류": []})
+            for d in summary_data:
+                name = d["name"]
+                if d["error"] and d["error"] != "오늘 일기 없음": cats["일기 미제출 또는 오류"].append(f"{name} ({d['error']})")
+                elif d["error"] == "오늘 일기 없음" or not d["emotion_today"]: cats["일기 미제출 또는 오류"].append(name)
+                elif d["emotion_today"] and isinstance(d["emotion_today"], str) and " - " in d["emotion_today"]:
+                    main_emo = d["emotion_today"].split(" - ")[0].strip()
+                    if main_emo in EMOTION_GROUPS: cats[main_emo].append(name)
+                    else: cats["감정 미분류"].append(f"{name} (감정: {d['emotion_today']})")
+                else: cats["일기 미제출 또는 오류"].append(f"{name} (감정 형식 오류: {d['emotion_today']})")
             
-            overview_cols = st.columns(len(EMOTION_GROUPS))
-            for i, group in enumerate(EMOTION_GROUPS):
-                with overview_cols[i]:
-                    st.subheader(f"{group} ({len(emotion_cats[group])}명)")
-                    if emotion_cats[group]:
-                        md_list = "\n".join([f"- {n}" for n in sorted(emotion_cats[group])])
-                        st.markdown(md_list if md_list else " ")
-                    else: st.info("이 감정을 느낀 학생이 없습니다.") 
-            
-            exp_col1, exp_col2 = st.columns(2)
-            with exp_col1:
-                if emotion_cats["일기 미제출 또는 오류"]:
-                    with st.expander(f"📝 일기 미제출/오류 ({len(emotion_cats['일기 미제출 또는 오류'])}명)", expanded=False):
-                        st.markdown("\n".join([f"- {s}" for s in sorted(emotion_cats["일기 미제출 또는 오류"])]))
-            with exp_col2:
-                if emotion_cats["감정 미분류"]:
-                    with st.expander(f"🤔 감정 미분류 ({len(emotion_cats['감정 미분류'])}명)", expanded=False):
-                        st.markdown("\n".join([f"- {s}" for s in sorted(emotion_cats["감정 미분류"])]))
+            cols_t1 = st.columns(len(EMOTION_GROUPS))
+            for i, grp in enumerate(EMOTION_GROUPS):
+                with cols_t1[i]:
+                    st.subheader(f"{grp} ({len(cats[grp])}명)")
+                    if cats[grp]: st.markdown("\n".join([f"- {n}" for n in sorted(cats[grp])]))
+                    else: st.info("이 감정을 느낀 학생이 없습니다.")
+            col_exp1, col_exp2 = st.columns(2)
+            with col_exp1:
+                if cats["일기 미제출 또는 오류"]:
+                    with st.expander(f"📝 일기 미제출/오류 ({len(cats['일기 미제출 또는 오류'])}명)"):
+                        st.markdown("\n".join([f"- {s}" for s in sorted(cats["일기 미제출 또는 오류"])]))
+            with col_exp2:
+                if cats["감정 미분류"]:
+                    with st.expander(f"🤔 감정 미분류 ({len(cats['감정 미분류'])}명)"):
+                        st.markdown("\n".join([f"- {s}" for s in sorted(cats["감정 미분류"])]))
     
-    with tab_student_messages:
-        st.header(tab_titles[1])
-        if not all_students_summary:
-            st.info("요약할 학생 데이터가 없습니다.")
+    with tab2: # 학생들이 전달하는 메시지
+        st.header(tabs_list[1])
+        if not summary_data: st.info("요약할 학생 데이터가 없습니다.")
         else:
-            neg_fb_students, other_fb_students = [], []
-            for data in all_students_summary:
-                if data["error"] or not data["emotion_today"] or not data["message_today"] or not data["message_today"].strip():
-                    continue 
-                emotion_full = data["emotion_today"]
-                if not isinstance(emotion_full, str) or " - " not in emotion_full: continue
-                emotion_group = emotion_full.split(" - ")[0].strip()
-                item = {"name": data["name"], "emotion": emotion_full, "message": data["message_today"].strip()}
-                if emotion_group == "😢 부정": neg_fb_students.append(item)
-                elif emotion_group in ["😀 긍정", "😐 보통"]: other_fb_students.append(item)
+            neg_msg, other_msg = [], []
+            for d in summary_data:
+                if d["error"] or not d["emotion_today"] or not d["message_today"] or not d["message_today"].strip(): continue
+                emo_full = d["emotion_today"]
+                if not isinstance(emo_full, str) or " - " not in emo_full: continue
+                item = {"name": d["name"], "emotion": emo_full, "message": d["message_today"].strip()}
+                if emo_full.split(" - ")[0].strip() == "😢 부정": neg_msg.append(item)
+                elif emo_full.split(" - ")[0].strip() in ["😀 긍정", "😐 보통"]: other_msg.append(item)
             
-            if not neg_fb_students and not other_fb_students:
-                st.success("오늘 선생님이나 친구들에게 하고 싶은 말을 적은 학생이 없습니다. 😊")
+            if not neg_msg and not other_msg: st.success("오늘 선생님이나 친구들에게 하고 싶은 말을 적은 학생이 없습니다. 😊")
             else:
                 st.subheader("😥 부정적 감정 학생들의 메시지")
-                if neg_fb_students:
-                    for item in sorted(neg_fb_students, key=lambda x: x['name']):
-                        with st.container(border=True):
-                            st.markdown(f"**학생명:** {item['name']} (<span style='color:red;'>{item['emotion']}</span>)", unsafe_allow_html=True)
-                            st.markdown(f"**메시지:**\n> {item['message']}")
+                if neg_msg:
+                    for item in sorted(neg_msg, key=lambda x: x['name']):
+                        with st.container(border=True): st.markdown(f"**학생명:** {item['name']} (<span style='color:red;'>{item['emotion']}</span>)\n\n**메시지:**\n> {item['message']}", unsafe_allow_html=True)
                 else: st.info("오늘, 부정적인 감정과 함께 메시지를 남긴 학생은 없습니다.")
                 st.markdown("---")
                 st.subheader("😊 그 외 감정 학생들의 메시지")
-                if other_fb_students:
-                    for item in sorted(other_fb_students, key=lambda x: x['name']):
-                        with st.container(border=True):
-                            st.markdown(f"**학생명:** {item['name']} ({item['emotion']})")
-                            st.markdown(f"**메시지:**\n> {item['message']}")
+                if other_msg:
+                    for item in sorted(other_msg, key=lambda x: x['name']):
+                        with st.container(border=True): st.markdown(f"**학생명:** {item['name']} ({item['emotion']})\n\n**메시지:**\n> {item['message']}")
                 else: st.info("오늘, 긍정적 또는 보통 감정과 함께 메시지를 남긴 학생은 없습니다.")
 
-    with tab_detail_view:
-        st.header(tab_titles[2])
-        if students_df.empty:
-            st.warning("학생 목록을 먼저 불러오세요 (오류 발생 시 '학생목록' 시트 점검).")
+    with tab3: # 학생별 일기 상세 보기
+        st.header(tabs_list[2])
+        if students_main_df.empty: st.warning("학생 목록을 불러오세요.")
         else:
-            options_students_detail = [""] + students_df["이름"].tolist()
-            current_sel_idx = 0
-            if st.session_state.detail_view_selected_student in options_students_detail:
-                current_sel_idx = options_students_detail.index(st.session_state.detail_view_selected_student)
+            opts_students = [""] + students_main_df["이름"].tolist()
+            sel_idx = opts_students.index(st.session_state.detail_view_selected_student) if st.session_state.detail_view_selected_student in opts_students else 0
+            st.session_state.detail_view_selected_student = st.selectbox("학생 선택", options=opts_students, index=sel_idx, key="sel_student_tab3_final")
             
-            st.session_state.detail_view_selected_student = st.selectbox(
-                "학생 선택", options=options_students_detail, index=current_sel_idx,
-                key="selectbox_student_detail_final_key" 
-            )
-            selected_student_name = st.session_state.detail_view_selected_student
-
-            if selected_student_name:
-                student_info = students_df[students_df["이름"] == selected_student_name].iloc[0]
-                name_detail = student_info["이름"]
-                sheet_url_detail = student_info["시트URL"]
+            selected_student = st.session_state.detail_view_selected_student
+            if selected_student:
+                s_info = students_main_df[students_main_df["이름"] == selected_student].iloc[0]
+                s_name, s_url = s_info["이름"], s_info["시트URL"]
                 
-                col1_back, col2_date = st.columns([1,3])
-                with col1_back:
-                    if st.button(f"다른 학생 선택 (목록)", key=f"back_to_list_btn_final_{name_detail}"):
-                        st.session_state.detail_view_selected_student = ""
-                        st.rerun()
-                with col2_date:
-                    selected_diary_date = st.date_input("확인할 날짜 선택", value=datetime.today(), 
-                                                        key=f"date_select_final_{name_detail}")
-                date_str_detail = selected_diary_date.strftime("%Y-%m-%d")
+                b_col1, d_col2 = st.columns([1,3])
+                with b_col1:
+                    if st.button(f"다른 학생 선택", key=f"back_btn_tab3_{s_name}"):
+                        st.session_state.detail_view_selected_student = ""; st.rerun()
+                with d_col2:
+                    sel_date = st.date_input("날짜 선택", value=datetime.today(), key=f"date_pick_tab3_{s_name}")
+                sel_date_str = sel_date.strftime("%Y-%m-%d")
 
-                if not sheet_url_detail or not isinstance(sheet_url_detail, str) or not sheet_url_detail.startswith("http"):
-                    st.error(f"'{name_detail}' 학생의 시트 URL이 올바르지 않습니다.")
+                if not s_url or not isinstance(s_url, str) or not s_url.startswith("http"):
+                    st.error(f"'{s_name}' 학생의 시트 URL이 올바르지 않습니다.")
                 else:
                     try:
-                        df_student_sheet_data = pd.DataFrame() # 초기화
-                        all_entries_from_sheet = []
+                        df_s_all_entries = pd.DataFrame()
+                        ws_s_detail = None # 워크시트 객체는 필요할 때만 사용
 
-                        with st.spinner(f"'{name_detail}' 학생의 전체 일기 기록 로딩 중..."):
-                            ws_student_detail = client_gspread.open_by_url(sheet_url_detail).sheet1
-                            all_entries_from_sheet = get_records_from_row2_header(ws_student_detail, EXPECTED_STUDENT_SHEET_HEADER)
-                            df_student_sheet_data = pd.DataFrame(all_entries_from_sheet)
+                        # 학생 전체 기록 로드 (캐싱 안함 - 상세보기에선 항상 최신 데이터)
+                        with st.spinner(f"'{s_name}' 학생의 전체 일기 기록 로딩 중..."):
+                            ws_s_detail = g_client.open_by_url(s_url).sheet1
+                            all_s_entries = get_records_from_row2_header(ws_s_detail, EXPECTED_STUDENT_SHEET_HEADER)
+                            df_s_all_entries = pd.DataFrame(all_s_entries)
 
-                        if df_student_sheet_data.empty or "날짜" not in df_student_sheet_data.columns:
-                            st.warning(f"'{name_detail}' 학생의 시트에 일기 데이터가 없거나 '날짜' 열이 없습니다.")
+                        if df_s_all_entries.empty or "날짜" not in df_s_all_entries.columns:
+                            st.warning(f"'{s_name}' 학생 시트에 데이터가 없거나 '날짜' 열이 없습니다.")
                         else:
-                            entry_df_selected_date = df_student_sheet_data[df_student_sheet_data["날짜"] == date_str_detail]
-                            
-                            if not entry_df_selected_date.empty:
-                                diary_entry = entry_df_selected_date.iloc[0]
-                                st.subheader(f"📘 {name_detail} ({date_str_detail}) 일기")
-                                st.write(f"**감정:** {diary_entry.get('감정', 'N/A')}")
-                                st.write(f"**감사한 일:** {diary_entry.get('감사한 일', 'N/A')}")
-                                st.write(f"**하고 싶은 말:** {diary_entry.get('하고 싶은 말', 'N/A')}")
-                                note_val_teacher = diary_entry.get('선생님 쪽지', '')
-                                st.write(f"**선생님 쪽지:** {note_val_teacher}")
+                            entry_df = df_s_all_entries[df_s_all_entries["날짜"] == sel_date_str]
+                            if not entry_df.empty: # 선택한 날짜에 일기가 있는 경우
+                                diary_e = entry_df.iloc[0]
+                                st.subheader(f"📘 {s_name} ({sel_date_str}) 일기"); st.divider()
+                                st.write(f"**감정:** {diary_e.get('감정', 'N/A')}")
+                                st.write(f"**감사한 일:** {diary_e.get('감사한 일', 'N/A')}")
+                                st.write(f"**하고 싶은 말:** {diary_e.get('하고 싶은 말', 'N/A')}")
+                                note_val = diary_e.get('선생님 쪽지', '')
+                                st.write(f"**선생님 쪽지:** {note_val}")
 
-                                note_input = st.text_area(f"✏️ 쪽지 작성/수정", value=note_val_teacher, key=f"note_input_{name_detail}_{date_str_detail}")
-                                if st.button(f"💾 쪽지 저장", key=f"save_note_btn_{name_detail}_{date_str_detail}"):
-                                    if not note_input.strip() and not note_val_teacher: st.warning("쪽지 내용이 비어있습니다.")
+                                note_in = st.text_area(f"✏️ 쪽지 작성/수정", value=note_val, key=f"note_in_{s_name}_{sel_date_str}")
+                                if st.button(f"💾 쪽지 저장", key=f"save_note_btn_{s_name}_{sel_date_str}"):
+                                    if not note_in.strip() and not note_val: st.warning("쪽지 비어있음.")
                                     else:
                                         try:
-                                            row_idx = -1
-                                            for i, r in enumerate(all_entries_from_sheet): # Use already fetched entries
-                                                if r.get("날짜") == date_str_detail: row_idx = i + 3; break
-                                            if row_idx != -1:
-                                                hdrs = ws_student_detail.row_values(2)
-                                                note_col = hdrs.index("선생님 쪽지") + 1 if "선생님 쪽지" in hdrs else 5
-                                                ws_student_detail.update_cell(row_idx, note_col, note_input)
-                                                st.success(f"쪽지 저장 완료!"); st.cache_data.clear(); st.rerun()
-                                            else: st.error("쪽지 저장 대상 일기 항목을 찾지 못했습니다.")
-                                        except Exception as e_save: st.error(f"쪽지 저장 오류: {e_save}")
-                                
-                                st.markdown("---"); st.subheader("🤖 AI 기반 오늘 일기 심층 분석 (GPT)")
-                                if st.button("오늘 일기 GPT로 분석하기 🔍", key=f"gpt_btn_{name_detail}_{date_str_detail}"):
-                                    if not openai_api_key_value or not client_openai:
-                                        st.error("OpenAI API 키 또는 클라이언트가 설정되지 않았습니다.")
-                                    else:
-                                        with st.spinner("GPT가 학생의 오늘 일기를 심층 분석 중입니다..."):
-                                            try:
-                                                gpt_prompt_user = GPT_SYSTEM_PROMPT.format(
-                                                    emotion_data=diary_entry.get('감정', ''),
-                                                    gratitude_data=diary_entry.get('감사한 일', ''), # "감사한 일" 사용
-                                                    message_data=diary_entry.get('하고 싶은 말', '')
-                                                )
-                                                gpt_response = client_openai.chat.completions.create(
-                                                    model="gpt-4o",
-                                                    messages=[{"role": "user", "content": gpt_prompt_user}],
-                                                    temperature=0.7, max_tokens=2000
-                                                )
-                                                gpt_result = gpt_response.choices[0].message.content
-                                                st.markdown("##### 💡 GPT 심층 분석 리포트:")
-                                                with st.expander("분석 결과 보기", expanded=True): st.markdown(gpt_result)
-                                            except Exception as e_gpt: st.error(f"GPT 분석 오류: {e_gpt}")
+                                            r_idx, hdrs = -1, ws_s_detail.row_values(2)
+                                            for i, r in enumerate(all_s_entries):
+                                                if r.get("날짜") == sel_date_str: r_idx = i + 3; break
+                                            if r_idx != -1:
+                                                note_c_idx = hdrs.index("선생님 쪽지") + 1 if "선생님 쪽지" in hdrs else 5
+                                                ws_s_detail.update_cell(r_idx, note_c_idx, note_in)
+                                                st.success(f"쪽지 저장!"); st.cache_data.clear(); st.rerun() # 상세 데이터는 캐시 안하므로 st.rerun()만으로도 갱신될 것
+                                            else: st.error("쪽지 저장 대상 일기 없음.")
+                                        except Exception as e: st.error(f"쪽지 저장 오류: {e}")
                             else: 
-                                st.info(f"'{name_detail}' 학생은 {date_str_detail}에 작성한 일기가 없습니다.")
+                                st.info(f"'{s_name}' 학생은 {sel_date_str}에 작성한 일기가 없습니다.")
 
-                        if not df_student_sheet_data.empty: # 학생의 과거 기록이 있다면 누적 분석 버튼 표시
-                            with st.expander("📊 이 학생의 전체 기록 누적 분석 (워드클라우드 등)", expanded=False):
-                                if st.button(f"{name_detail} 학생 전체 기록 분석 실행", key=f"cumulative_btn_{name_detail}"):
-                                    st.markdown("---"); st.write("##### 학생 전체 감정 대분류 통계")
-                                    if "감정" in df_student_sheet_data.columns and not df_student_sheet_data["감정"].empty:
-                                        df_student_sheet_data['감정 대분류'] = df_student_sheet_data['감정'].astype(str).apply(
-                                            lambda x: x.split(" - ")[0].strip() if isinstance(x, str) and " - " in x else "미분류")
-                                        emotion_counts_hist = df_student_sheet_data['감정 대분류'].value_counts()
-                                        st.bar_chart(emotion_counts_hist)
-                                    else: st.info("감정 데이터 부족으로 통계 표시 불가.")
-                                    st.markdown("---"); st.write("##### 학생 전체 '감사한 일' & '하고 싶은 말' 단어 분석") # "감사한 일" 사용
-                                    wc_texts = []
-                                    for col_name_wc in ["감사한 일", "하고 싶은 말"]: # "감사한 일" 사용
-                                        if col_name_wc in df_student_sheet_data.columns:
-                                            wc_texts.extend(df_student_sheet_data[col_name_wc].dropna().astype(str).tolist())
-                                    wc_text_data = " ".join(wc_texts)
-                                    if wc_text_data.strip():
+                        # 학생 전체 기록 기반 분석 (누적 & GPT) - 학생 기록이 있을 때만 버튼 표시
+                        if not df_s_all_entries.empty:
+                            st.markdown("---"); st.subheader("📊 학생 전체 기록 기반 분석")
+                            
+                            # 누적 분석 (워드클라우드, 감정통계) 버튼
+                            if st.button(f"{s_name} 학생 전체 기록 누적 분석 (워드클라우드 등)", key=f"cumul_analysis_btn_{s_name}"):
+                                st.write("##### 학생 전체 감정 대분류 통계")
+                                if "감정" in df_s_all_entries.columns and not df_s_all_entries["감정"].empty:
+                                    df_s_all_entries['감정 대분류'] = df_s_all_entries['감정'].astype(str).apply(
+                                        lambda x: x.split(" - ")[0].strip() if isinstance(x, str) and " - " in x else "미분류")
+                                    st.bar_chart(df_s_all_entries['감정 대분류'].value_counts())
+                                else: st.info("감정 데이터 부족.")
+                                
+                                st.write("##### 학생 전체 '감사한 일' & '하고 싶은 말' 단어 분석")
+                                wc_txts = []
+                                for col in ["감사한 일", "하고 싶은 말"]:
+                                    if col in df_s_all_entries.columns: wc_txts.extend(df_s_all_entries[col].dropna().astype(str).tolist())
+                                wc_data = " ".join(wc_txts)
+                                if wc_data.strip():
+                                    try:
+                                        wc_img = WordCloud(font_path=FONT_PATH, width=700, height_ratio=0.5, background_color="white").generate(wc_data)
+                                        fig, ax = plt.subplots(); ax.imshow(wc_img, interpolation='bilinear'); ax.axis("off"); st.pyplot(fig)
+                                    except Exception as e: st.error(f"워드클라우드 오류 (폰트: '{FONT_PATH}'): {e}")
+                                else: st.info("워드클라우드용 단어 부족.")
+                            
+                            # GPT 누적 분석 버튼
+                            if st.button(f"{s_name} 학생 전체 기록 GPT 심층 분석 📝", key=f"gpt_cumulative_btn_{s_name}"):
+                                if not openai_api_key or not client_openai:
+                                    st.error("OpenAI API 키 또는 클라이언트 미설정.")
+                                else:
+                                    with st.spinner("GPT가 학생의 전체 누적 기록을 심층 분석 중입니다... (시간 소요)"):
                                         try:
-                                            wc = WordCloud(font_path=FONT_PATH, width=800, height=300, background_color="white").generate(wc_text_data)
-                                            fig_wc, ax_wc = plt.subplots(); ax_wc.imshow(wc, interpolation='bilinear'); ax_wc.axis("off")
-                                            st.pyplot(fig_wc)
-                                        except RuntimeError as e_font: st.error(f"워드클라우드 폰트('{FONT_PATH}') 오류: {e_font}")
-                                        except Exception as e_wc: st.error(f"워드클라우드 생성 오류: {e_wc}")
-                                    else: st.info("단어 분석을 위한 텍스트 부족.")
-                    except gspread.exceptions.SpreadsheetNotFound:
-                        st.error(f"'{name_detail}' 학생 시트 URL({sheet_url_detail})을 찾을 수 없습니다.")
-                    except Exception as e_gen_detail:
-                        st.error(f"'{name_detail}' 학생 데이터 처리 중 오류: {type(e_gen_detail).__name__} - {e_gen_detail}")
-            else: # 학생 미선택
-                st.info("상단에서 학생을 선택해주세요.")
+                                            # 누적 데이터 준비 (감정, 감사한 일, 하고 싶은 말)
+                                            cumulative_emotions = [f"{r.get('날짜','')}: {r.get('감정','')}" for r in all_s_entries if r.get('감정')]
+                                            cumulative_gratitude = [f"{r.get('날짜','')}: {r.get('감사한 일','')}" for r in all_s_entries if r.get('감사한 일','').strip()]
+                                            cumulative_message = [f"{r.get('날짜','')}: {r.get('하고 싶은 말','')}" for r in all_s_entries if r.get('하고 싶은 말','').strip()]
+                                            
+                                            # 너무 긴 데이터는 요약 또는 일부만 전달 고려 (여기서는 일단 다 합쳐봄)
+                                            # 실제로는 토큰 수 제한 고려 필요
+                                            data_for_gpt = (
+                                                f"전체 감정 기록:\n" + "\n".join(cumulative_emotions) + "\n\n"
+                                                f"전체 감사한 일 기록:\n" + "\n".join(cumulative_gratitude) + "\n\n"
+                                                f"전체 하고 싶은 말 기록:\n" + "\n".join(cumulative_message)
+                                            )
+                                            # 토큰 수 절약을 위해 각 항목별 요약 전달도 가능
+                                            # 여기서는 간단히 합쳐서 전달
+                                            
+                                            # 프롬프트 포맷팅 (데이터 부분만 채움)
+                                            user_prompt_content = GPT_CUMULATIVE_SYSTEM_PROMPT.format(
+                                                cumulative_diary_data_for_gpt=data_for_gpt
+                                            )
+                                            
+                                            # 시스템 프롬프트와 사용자 프롬프트를 분리하여 전달하는 것이 최신 방식에 더 부합
+                                            # GPT_CUMULATIVE_SYSTEM_PROMPT의 첫 부분을 시스템 프롬프트로 사용
+                                            prompt_parts = GPT_CUMULATIVE_SYSTEM_PROMPT.split("제공된 누적 일기 내용 형식 (실제 내용은 아래 데이터 형식으로 전달됩니다):")
+                                            system_instructions = prompt_parts[0].strip()
+                                            user_request_template = "제공된 누적 일기 내용 형식 (실제 내용은 아래 데이터 형식으로 전달됩니다):" + prompt_parts[1]
+                                            
+                                            formatted_user_request = user_request_template.format(
+                                                 cumulative_diary_data_for_gpt=data_for_gpt
+                                            )
+
+                                            gpt_resp = client_openai.chat.completions.create(
+                                                model="gpt-4o",
+                                                messages=[
+                                                    {"role": "system", "content": system_instructions},
+                                                    {"role": "user", "content": formatted_user_request}
+                                                ],
+                                                temperature=0.7, max_tokens=3000 # 충분한 길이 확보
+                                            )
+                                            gpt_analysis = gpt_resp.choices[0].message.content
+                                            st.markdown("##### 💡 GPT 누적 기록 심층 분석 리포트:")
+                                            with st.expander("분석 결과 보기", expanded=True): st.markdown(gpt_analysis)
+                                        except Exception as e: st.error(f"GPT 누적 분석 오류: {e}")
+                    except Exception as e: st.error(f"'{s_name}' 학생 데이터 처리 중 오류: {e}")
+            else: st.info("상단에서 학생을 선택하여 상세 내용을 확인하세요.")
